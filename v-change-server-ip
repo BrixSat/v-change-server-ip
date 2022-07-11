@@ -47,10 +47,23 @@ swapfile()
         log "$DATE $BIN $1\t: $OLD_IP -> $NEW_IP";
 }
 
+swapfile2()
+{
+        if [ ! -e $1 ]; then
+                log "Cannot Find $1 to change the IPs. Skipping...";
+                return;
+        fi
+	sed -i "s/${OLD_IP}/${NEW_IP}/g" ${1}
+        log "$DATE $BIN $1\t: $OLD_IP -> $NEW_IP";
+}
+
 if [ $# = 3 ]; then
         swapfile $3;
         exit 0;
 fi
+
+
+
 
 
 IPFILE_OLD=/usr/local/vesta/data/ips/$OLD_IP
@@ -66,10 +79,36 @@ else
         log "$DATE $0 $IPFILE_OLD\t: $OLD_IP -> $NEW_IP";
 fi
 
+
+NGINX_HOSTS="/etc/nginx/conf.d/vesta.conf"
+while read line;
+do
+        CFG=$(echo "$line" | awk '{ print $2 }' | sed 's/;//g')
+        if [ -f $CFG ]
+        then
+                echo $CFG
+                swapfile2 "$CFG"
+        fi
+done<$(echo ${NGINX_HOSTS})
+
+
+
+APACHE2_HOSTS="/etc/apache2/conf.d/vesta.conf"
+while read line;
+do
+        CFG=$(echo "$line" | awk '{ print $2 }' | sed 's/;//g')
+        if [ -f $CFG ]
+        then
+                echo "Doing $CFG"
+                swapfile2 "$CFG"
+        fi
+done<$(echo ${APACHE2_HOSTS})
+
+
 if [ "${HAVE_HTTPD}" -eq 1 ]; then
-        if [ -e /etc/httpd/conf.d/${OLD_IP}.conf ]; then
-                swapfile /etc/httpd/conf.d/${OLD_IP}.conf
-                mv -f /etc/httpd/conf.d/$OLD_IP.conf /etc/httpd/conf.d/${NEW_IP}.conf
+        if [ -e /etc/apache2/conf.d/${OLD_IP}.conf ]; then
+                swapfile /etc/apache2/conf.d/${OLD_IP}.conf
+                mv -f /etc/apache2/conf.d/$OLD_IP.conf /etc/apache2/conf.d/${NEW_IP}.conf
         fi
         swapfile /etc/httpd/conf.d/mod_extract_forwarded.conf
 fi
@@ -101,10 +140,11 @@ for i in `ls $ULDDU`; do
         done;
 
         if [ "${HAVE_HTTPD}" -eq 1 ]; then
-                swapfile /home/$i/conf/web/httpd.conf
+                swapfile /home/$i/conf/web/apache2.conf
         fi
         if [ "${HAVE_NGINX}" -eq 1 ]; then
                 swapfile /home/$i/conf/web/nginx.conf
+
         fi
 
         for j in `ls /home/$i/conf/dns/*.db`; do
@@ -118,10 +158,11 @@ done;
 
 #this is needed to update the serial in the db files.
 if [ "${HAVE_HTTPD}" -eq 1 ]; then
-   service httpd restart
+   service apache2 restart
 fi
 if [ "${HAVE_NGINX}" -eq 1 ]; then
    service nginx restart
 fi
 
 echo "*** Done swapping $OLD_IP to $NEW_IP ***";
+
